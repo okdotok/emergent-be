@@ -28,7 +28,10 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+# In production, MONGO_URL must be set - don't default to localhost
+mongo_url = os.environ.get('MONGO_URL')
+if not mongo_url:
+    raise ValueError("MONGO_URL environment variable is required. Please set it in your deployment configuration.")
 db_name = os.environ.get('DB_NAME', 'theglobal_uren')
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
@@ -52,49 +55,16 @@ api_router = APIRouter(prefix="/api")
 @app.on_event("startup")
 async def startup_event():
     """Create database indexes and ensure system dependencies"""
-    import subprocess
     import shutil
     
-    # 1. Ensure ssconvert (gnumeric) is installed for PDF generation
+    # 1. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
+    # Installation requires sudo which is not available on most cloud platforms
     try:
-        if not shutil.which("ssconvert"):
-            print("⚠️  ssconvert not found, installing gnumeric...")
-            print("   Running apt-get update...")
-            result = subprocess.run(
-                ["apt-get", "update"],
-                capture_output=True,
-                timeout=60
-            )
-            print(f"   apt-get update completed (return code: {result.returncode})")
-            
-            print("   Installing gnumeric package...")
-            result = subprocess.run(
-                ["apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "gnumeric"],
-                capture_output=True,
-                timeout=120,
-                env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-            )
-            print(f"   apt-get install completed (return code: {result.returncode})")
-            
-            # Verify installation
-            if shutil.which("ssconvert"):
-                version_result = subprocess.run(
-                    ["ssconvert", "--version"],
-                    capture_output=True,
-                    text=True
-                )
-                print(f"✅ Gnumeric installed successfully: {version_result.stdout.split()[2] if version_result.stdout else 'unknown version'}")
-            else:
-                print(f"❌ Failed to install gnumeric")
-                if result.stderr:
-                    print(f"   Error: {result.stderr.decode()[:200]}")
+        if shutil.which("ssconvert"):
+            print("✅ ssconvert available for PDF generation")
         else:
-            version_result = subprocess.run(
-                ["ssconvert", "--version"],
-                capture_output=True,
-                text=True
-            )
-            print(f"✅ ssconvert already available: {version_result.stdout.split()[2] if version_result.stdout else 'version unknown'}")
+            print("⚠️  ssconvert not found - PDF export features may be limited")
+            print("   Note: Install gnumeric manually if needed (requires system admin)")
     except Exception as e:
         print(f"⚠️  Gnumeric check warning: {e}")
     
