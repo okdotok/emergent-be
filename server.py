@@ -1678,43 +1678,34 @@ async def export_mandagenstaat_pdf(
             # CHECK: Ensure ssconvert is available
             import shutil
             if not shutil.which('ssconvert'):
-                # Try to install gnumeric on-the-fly
-                logger.warning("ssconvert not found, attempting to install gnumeric...")
-                install_result = subprocess.run(
-                    ['apt-get', 'update'],
-                    capture_output=True,
-                    timeout=30
-                )
-                install_result = subprocess.run(
-                    ['apt-get', 'install', '-y', 'gnumeric'],
-                    capture_output=True,
-                    timeout=60
-                )
+                # Don't try to install on cloud platforms - use alternative PDF generation
+                logger.warning("ssconvert not found, using alternative PDF generation method...")
+                # Use template-based PDF generation which doesn't require ssconvert
+                pdf_data = create_pdf_from_template(project, user_week_data, start_date, end_date)
+            else:
+                # SSCONVERT: Excel → PDF (respecteert Excel print settings)
+                result = subprocess.run([
+                    'ssconvert',
+                    excel_path,
+                    pdf_path,
+                    '--export-type=Gnumeric_pdf:pdf_assistant'
+                ], timeout=30, capture_output=True, text=True)
                 
-                if not shutil.which('ssconvert'):
-                    raise Exception("ssconvert (gnumeric) kon niet worden geïnstalleerd. Neem contact op met support.")
-            
-            # SSCONVERT: Excel → PDF (respecteert Excel print settings)
-            result = subprocess.run([
-                'ssconvert',
-                excel_path,
-                pdf_path,
-                '--export-type=Gnumeric_pdf:pdf_assistant'
-            ], timeout=30, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                logger.error(f"ssconvert stderr: {result.stderr}")
-                raise Exception(f"ssconvert failed: {result.stderr}")
-            
-            if not os.path.exists(pdf_path):
-                raise Exception(f"PDF not created at: {pdf_path}")
-            
-            # NOTE: ssconvert neemt automatisch images mee uit Excel template
-            # Geen extra logo insert nodig
-            
-            # Read PDF
-            with open(pdf_path, 'rb') as f:
-                pdf_data = io.BytesIO(f.read())
+                if result.returncode != 0:
+                    logger.error(f"ssconvert stderr: {result.stderr}")
+                    # Fallback to template-based PDF generation
+                    logger.warning("ssconvert failed, falling back to alternative PDF generation...")
+                    pdf_data = create_pdf_from_template(project, user_week_data, start_date, end_date)
+                else:
+                    if not os.path.exists(pdf_path):
+                        raise Exception(f"PDF not created at: {pdf_path}")
+                    
+                    # NOTE: ssconvert neemt automatisch images mee uit Excel template
+                    # Geen extra logo insert nodig
+                    
+                    # Read PDF
+                    with open(pdf_path, 'rb') as f:
+                        pdf_data = io.BytesIO(f.read())
             
         finally:
             # Cleanup
