@@ -76,4 +76,4 @@ playwright==1.55.0
 nest-asyncio
 Spire.XLS==15.7.1
 PyMuPDF==1.26.5
-aspose-cells==25.10.0
+aspose-cells==24.10.0
