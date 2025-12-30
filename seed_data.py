@@ -17,7 +17,24 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+
+# Ensure MongoDB Atlas connection string has proper parameters
+if 'mongodb+srv://' in mongo_url:
+    if '?' in mongo_url:
+        query_part = mongo_url.split('?')[1]
+        if 'retryWrites=' not in query_part:
+            separator = '&' if query_part else ''
+            mongo_url += f'{separator}retryWrites=true'
+        if 'w=' not in query_part:
+            mongo_url += '&w=majority'
+    else:
+        mongo_url += '?retryWrites=true&w=majority'
+
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=30000,
+    connectTimeoutMS=20000,
+)
 db = client[os.environ['DB_NAME']]
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

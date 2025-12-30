@@ -32,8 +32,34 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
     raise ValueError("MONGO_URL environment variable is required. Please set it in your deployment configuration.")
+
+# Ensure MongoDB Atlas connection string has proper parameters
+# For mongodb+srv:// connections, TLS is automatically enabled
+# Add retryWrites and w=majority if not present
+if 'mongodb+srv://' in mongo_url:
+    # Check if connection string already has query parameters
+    if '?' in mongo_url:
+        query_part = mongo_url.split('?')[1]
+        # Add retryWrites and w=majority if missing
+        if 'retryWrites=' not in query_part:
+            separator = '&' if query_part else ''
+            mongo_url += f'{separator}retryWrites=true'
+        if 'w=' not in query_part:
+            mongo_url += '&w=majority'
+    else:
+        # No query parameters, add them
+        mongo_url += '?retryWrites=true&w=majority'
+
 db_name = os.environ.get('DB_NAME', 'theglobal_uren')
-client = AsyncIOMotorClient(mongo_url)
+
+# Create MongoDB client
+# For mongodb+srv://, TLS is automatically enabled by Motor
+# Add connection timeout settings for better error handling
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=30000,  # 30 second timeout
+    connectTimeoutMS=20000,  # 20 second connection timeout
+)
 db = client[db_name]
 
 # Security
