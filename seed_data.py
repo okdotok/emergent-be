@@ -38,7 +38,8 @@ client = AsyncIOMotorClient(
     connectTimeoutMS=20000,
     tlsCAFile=certifi.where(),  # Required for MongoDB Atlas SSL
 )
-db = client[os.environ['DB_NAME']]
+db_name = os.environ.get('DB_NAME', 'theglobal_uren')
+db = client[db_name]
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
