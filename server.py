@@ -124,7 +124,7 @@ async def startup_event():
     
     logger.info("🚀 Starting backend server...")
     
-    # 1. Test MongoDB connection
+    # 1. Test MongoDB connection (non-blocking - log warning if fails, don't crash)
     try:
         logger.info("📡 Testing MongoDB connection...")
         # Test connection by listing databases
@@ -139,9 +139,9 @@ async def startup_event():
         collections = await db.list_collection_names()
         logger.info(f"📁 Available collections: {', '.join(collections) if collections else 'None'}")
     except Exception as e:
-        logger.error(f"❌ MongoDB connection FAILED: {str(e)}")
-        logger.error(f"   Connection string: {mongo_url[:50]}... (truncated for security)")
-        raise
+        logger.warning(f"⚠️  MongoDB connection test failed (app will continue): {str(e)}")
+        logger.warning(f"   Connection string: {mongo_url[:50]}... (truncated for security)")
+        logger.warning("   MongoDB connection will be retried on first request")
     
     # 2. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
     # Installation requires sudo which is not available on most cloud platforms
