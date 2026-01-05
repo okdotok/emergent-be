@@ -416,12 +416,8 @@ async def login(credentials: UserLogin):
     logger.info(f"   User ID: {user_obj.id}, Role: {user_obj.role}")
     logger.info(f"   Token length: {len(access_token)}")
     
-    # Serialize to dict to ensure proper JSON serialization
-    response_dict = token_response.model_dump(mode='json')
-    logger.info(f"   Response dict: {response_dict}")
-    
-    # Return as JSONResponse to ensure proper serialization
-    return JSONResponse(content=response_dict)
+    # FastAPI will automatically serialize TokenResponse to JSON using response_model
+    return token_response
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
@@ -1982,19 +1978,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         logger.info(f"📥 INCOMING REQUEST: {method} {path}{'?' + query_params if query_params else ''} | Client: {client_host}")
         
         # Log request body for POST/PUT/PATCH (excluding sensitive endpoints)
+        # Note: We don't read the body here to avoid breaking the request stream
+        # FastAPI will handle body parsing automatically
         if method in ["POST", "PUT", "PATCH"] and "password" not in path.lower():
-            try:
-                body = await request.body()
-                if body:
-                    # Limit body logging to 500 chars
-                    body_str = body.decode('utf-8')[:500]
-                    logger.info(f"   Request body: {body_str}{'...' if len(body) > 500 else ''}")
-                # Recreate request with body for downstream processing
-                async def receive():
-                    return {"type": "http.request", "body": body}
-                request._receive = receive
-            except Exception as e:
-                logger.warning(f"   Could not read request body: {e}")
+            logger.info(f"   Request body will be parsed by FastAPI")
         
         try:
             # Process request
