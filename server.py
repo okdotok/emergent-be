@@ -61,15 +61,12 @@ db_name = os.environ.get('DB_NAME', 'theglobal_uren')
 import certifi
 
 # Ensure certifi is available for SSL certificate validation
-# Motor will automatically use certifi.where() for mongodb+srv:// connections
+# Explicitly pass the CA certificate file for Render/cloud deployments
 client = AsyncIOMotorClient(
     mongo_url,
     serverSelectionTimeoutMS=30000,  # 30 second timeout
     connectTimeoutMS=20000,  # 20 second connection timeout
-    # For mongodb+srv://, Motor automatically:
-    # - Enables TLS/SSL
-    # - Uses certifi CA bundle if available
-    # - Validates certificates
+    tlsCAFile=certifi.where(),  # Explicitly specify CA certificates for SSL
 )
 db = client[db_name]
 
