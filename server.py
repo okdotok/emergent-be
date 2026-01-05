@@ -122,47 +122,24 @@ async def startup_event():
     """Create database indexes and ensure system dependencies"""
     import shutil
     
-    logger.info("🚀 Starting backend server...")
-    
-    # 1. Test MongoDB connection (non-blocking - log warning if fails, don't crash)
-    try:
-        logger.info("📡 Testing MongoDB connection...")
-        # Test connection by listing databases
-        await client.admin.command('ping')
-        logger.info(f"✅ MongoDB connection successful! Database: {db_name}")
-        
-        # Get connection info (without sensitive data)
-        server_info = await client.server_info()
-        logger.info(f"📊 MongoDB Server Version: {server_info.get('version', 'unknown')}")
-        
-        # Test database access
-        collections = await db.list_collection_names()
-        logger.info(f"📁 Available collections: {', '.join(collections) if collections else 'None'}")
-    except Exception as e:
-        logger.warning(f"⚠️  MongoDB connection test failed (app will continue): {str(e)}")
-        logger.warning(f"   Connection string: {mongo_url[:50]}... (truncated for security)")
-        logger.warning("   MongoDB connection will be retried on first request")
-    
-    # 2. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
+    # 1. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
     # Installation requires sudo which is not available on most cloud platforms
     try:
         if shutil.which("ssconvert"):
-            logger.info("✅ ssconvert available for PDF generation")
+            print("✅ ssconvert available for PDF generation")
         else:
-            logger.warning("⚠️  ssconvert not found - PDF export features may be limited")
-            logger.warning("   Note: Install gnumeric manually if needed (requires system admin)")
+            print("⚠️  ssconvert not found - PDF export features may be limited")
+            print("   Note: Install gnumeric manually if needed (requires system admin)")
     except Exception as e:
-        logger.warning(f"⚠️  Gnumeric check warning: {e}")
+        print(f"⚠️  Gnumeric check warning: {e}")
     
-    # 3. Create database indexes for performance
+    # 2. Create database indexes for performance
     try:
         await db.clock_entries.create_index([("user_id", 1), ("clock_in_time", -1)])
         await db.clock_entries.create_index([("id", 1)])
-        logger.info("✅ Database indexes created successfully")
+        print("✅ Database indexes created successfully")
     except Exception as e:
-        logger.warning(f"⚠️  Index creation warning: {e}")
-    
-    logger.info("✅ Backend startup complete!")
+        print(f"⚠️  Index creation warning: {e}")
 
 # Models
 class Location(BaseModel):
