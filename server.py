@@ -1,10 +1,12 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import traceback
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
@@ -77,30 +79,81 @@ DEFAULT_PROJECT_MATCH_RADIUS = 250  # meters
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint to verify DB connection"""
+    try:
+        # Test DB connection
+        await client.admin.command('ping')
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Startup event to create indexes and ensure dependencies
 @app.on_event("startup")
 async def startup_event():
     """Create database indexes and ensure system dependencies"""
     import shutil
     
-    # 1. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
+    logger.info("🚀 Starting backend server...")
+    
+    # 1. Test MongoDB connection
+    try:
+        logger.info("📡 Testing MongoDB connection...")
+        # Test connection by listing databases
+        await client.admin.command('ping')
+        logger.info(f"✅ MongoDB connection successful! Database: {db_name}")
+        
+        # Get connection info (without sensitive data)
+        server_info = await client.server_info()
+        logger.info(f"📊 MongoDB Server Version: {server_info.get('version', 'unknown')}")
+        
+        # Test database access
+        collections = await db.list_collection_names()
+        logger.info(f"📁 Available collections: {', '.join(collections) if collections else 'None'}")
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection FAILED: {str(e)}")
+        logger.error(f"   Connection string: {mongo_url[:50]}... (truncated for security)")
+        raise
+    
+    # 2. Check for ssconvert (gnumeric) - don't try to install on Render/cloud platforms
     # Installation requires sudo which is not available on most cloud platforms
     try:
         if shutil.which("ssconvert"):
-            print("✅ ssconvert available for PDF generation")
+            logger.info("✅ ssconvert available for PDF generation")
         else:
-            print("⚠️  ssconvert not found - PDF export features may be limited")
-            print("   Note: Install gnumeric manually if needed (requires system admin)")
+            logger.warning("⚠️  ssconvert not found - PDF export features may be limited")
+            logger.warning("   Note: Install gnumeric manually if needed (requires system admin)")
     except Exception as e:
-        print(f"⚠️  Gnumeric check warning: {e}")
+        logger.warning(f"⚠️  Gnumeric check warning: {e}")
     
-    # 2. Create database indexes for performance
+    # 3. Create database indexes for performance
     try:
         await db.clock_entries.create_index([("user_id", 1), ("clock_in_time", -1)])
         await db.clock_entries.create_index([("id", 1)])
-        print("✅ Database indexes created successfully")
+        logger.info("✅ Database indexes created successfully")
     except Exception as e:
-        print(f"⚠️  Index creation warning: {e}")
+        logger.warning(f"⚠️  Index creation warning: {e}")
+    
+    logger.info("✅ Backend startup complete!")
 
 # Models
 class Location(BaseModel):
@@ -1912,6 +1965,63 @@ async def import_backup(
 
 app.include_router(api_router)
 
+# Request logging middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+import time
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        
+        # Log request
+        method = request.method
+        path = request.url.path
+        query_params = str(request.query_params) if request.query_params else ""
+        client_host = request.client.host if request.client else "unknown"
+        
+        logger.info(f"📥 INCOMING REQUEST: {method} {path}{'?' + query_params if query_params else ''} | Client: {client_host}")
+        
+        # Log request body for POST/PUT/PATCH (excluding sensitive endpoints)
+        if method in ["POST", "PUT", "PATCH"] and "password" not in path.lower():
+            try:
+                body = await request.body()
+                if body:
+                    # Limit body logging to 500 chars
+                    body_str = body.decode('utf-8')[:500]
+                    logger.info(f"   Request body: {body_str}{'...' if len(body) > 500 else ''}")
+                # Recreate request with body for downstream processing
+                async def receive():
+                    return {"type": "http.request", "body": body}
+                request._receive = receive
+            except Exception as e:
+                logger.warning(f"   Could not read request body: {e}")
+        
+        try:
+            # Process request
+            response = await call_next(request)
+            
+            # Calculate response time
+            process_time = time.time() - start_time
+            
+            # Log response
+            status_code = response.status_code
+            status_emoji = "✅" if 200 <= status_code < 300 else "⚠️" if 300 <= status_code < 400 else "❌"
+            logger.info(f"{status_emoji} RESPONSE: {method} {path} | Status: {status_code} | Time: {process_time:.3f}s")
+            
+            return response
+            
+        except Exception as e:
+            # Log error
+            process_time = time.time() - start_time
+            logger.error(f"❌ ERROR: {method} {path} | Error: {str(e)} | Time: {process_time:.3f}s")
+            logger.error(f"   Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"   Traceback: {traceback.format_exc()}")
+            raise
+
+app.add_middleware(RequestLoggingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1920,12 +2030,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unhandled errors"""
+    logger.error(f"❌ UNHANDLED EXCEPTION: {type(exc).__name__}: {str(exc)}")
+    logger.error(f"   Path: {request.method} {request.url.path}")
+    logger.error(f"   Traceback: {traceback.format_exc()}")
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "error_type": type(exc).__name__,
+            "message": str(exc)
+        }
+    )
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    logger.info("🛑 Shutting down backend server...")
     client.close()
+    logger.info("✅ Backend shutdown complete")
