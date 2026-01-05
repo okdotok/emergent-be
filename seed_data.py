@@ -16,6 +16,8 @@ from math import radians, sin, cos, sqrt, atan2
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+import certifi
+
 mongo_url = os.environ['MONGO_URL']
 
 # Ensure MongoDB Atlas connection string has proper parameters
@@ -34,6 +36,7 @@ client = AsyncIOMotorClient(
     mongo_url,
     serverSelectionTimeoutMS=30000,
     connectTimeoutMS=20000,
+    tlsCAFile=certifi.where(),  # Required for MongoDB Atlas SSL
 )
 db = client[os.environ['DB_NAME']]
 
