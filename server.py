@@ -415,9 +415,13 @@ async def login(credentials: UserLogin):
     logger.info(f"✅ Login successful for: {credentials.email}")
     logger.info(f"   User ID: {user_obj.id}, Role: {user_obj.role}")
     logger.info(f"   Token length: {len(access_token)}")
-    logger.info(f"   Response data: {token_response.model_dump()}")
     
-    return token_response
+    # Serialize to dict to ensure proper JSON serialization
+    response_dict = token_response.model_dump(mode='json')
+    logger.info(f"   Response dict: {response_dict}")
+    
+    # Return as JSONResponse to ensure proper serialization
+    return JSONResponse(content=response_dict)
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
