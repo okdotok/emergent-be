@@ -56,11 +56,20 @@ db_name = os.environ.get('DB_NAME', 'theglobal_uren')
 
 # Create MongoDB client
 # For mongodb+srv://, TLS is automatically enabled by Motor
+# Motor will automatically use certifi if available (which is in requirements.txt)
 # Add connection timeout settings for better error handling
+import certifi
+
+# Ensure certifi is available for SSL certificate validation
+# Motor will automatically use certifi.where() for mongodb+srv:// connections
 client = AsyncIOMotorClient(
     mongo_url,
     serverSelectionTimeoutMS=30000,  # 30 second timeout
     connectTimeoutMS=20000,  # 20 second connection timeout
+    # For mongodb+srv://, Motor automatically:
+    # - Enables TLS/SSL
+    # - Uses certifi CA bundle if available
+    # - Validates certificates
 )
 db = client[db_name]
 
