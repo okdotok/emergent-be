@@ -9,7 +9,7 @@ cffi==2.0.0
 charset-normalizer==3.4.3
 click==8.3.0
 cryptography==46.0.2
-dnspython==2.8.0
+dnspython>=2.4
 ecdsa==0.19.1
 email-validator==2.3.0
 et_xmlfile==2.0.0
@@ -45,7 +45,7 @@ pydantic_core==2.41.1
 pyflakes==3.4.0
 Pygments==2.19.2
 PyJWT==2.10.1
-pymongo[ocsp]==4.5.0
+pymongo>=4.6,<5
 pytest==8.4.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
