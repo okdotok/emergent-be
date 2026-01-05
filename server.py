@@ -395,8 +395,11 @@ async def register(user_data: UserCreate):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: UserLogin):
+    logger.info(f"🔐 Login attempt for email: {credentials.email}")
+    
     user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
     if not user or not verify_password(credentials.password, user["password"]):
+        logger.warning(f"❌ Login failed for email: {credentials.email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     if isinstance(user['created_at'], str):
@@ -405,7 +408,16 @@ async def login(credentials: UserLogin):
     user_obj = User(**{k: v for k, v in user.items() if k != "password"})
     access_token = create_access_token(data={"sub": user_obj.id})
     
-    return TokenResponse(access_token=access_token, token_type="bearer", user=user_obj)
+    # Create response object
+    token_response = TokenResponse(access_token=access_token, token_type="bearer", user=user_obj)
+    
+    # Log what we're returning
+    logger.info(f"✅ Login successful for: {credentials.email}")
+    logger.info(f"   User ID: {user_obj.id}, Role: {user_obj.role}")
+    logger.info(f"   Token length: {len(access_token)}")
+    logger.info(f"   Response data: {token_response.model_dump()}")
+    
+    return token_response
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
