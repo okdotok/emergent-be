@@ -537,10 +537,13 @@ async def reset_password(reset_data: PasswordReset):
 # Invitation endpoints
 @api_router.post("/invitations", response_model=Invitation)
 async def create_invitation(invitation_data: InvitationCreate, admin: User = Depends(get_admin_user)):
+    logger.info(f"📧 Creating invitation for email: {invitation_data.email}, name: {invitation_data.name}")
+    
     existing = await db.invitations.find_one(
         {"email": invitation_data.email, "used": False}
     )
     if existing:
+        logger.warning(f"❌ Active invitation already exists for {invitation_data.email}")
         raise HTTPException(status_code=400, detail="Active invitation already exists for this email")
     
     invitation = Invitation(
@@ -552,19 +555,28 @@ async def create_invitation(invitation_data: InvitationCreate, admin: User = Dep
     invitation_dict["created_at"] = invitation_dict["created_at"].isoformat()
     
     await db.invitations.insert_one(invitation_dict)
+    logger.info(f"✅ Invitation created in database: {invitation.id}")
     
     # Send email
-    from email_service import send_invitation_email
+    from email_service import send_invitation_email, FRONTEND_URL
+    logger.info(f"📤 Attempting to send invitation email to {invitation_data.email}")
+    logger.info(f"   Using FRONTEND_URL: {FRONTEND_URL}")
+    logger.info(f"   Invitation token: {invitation.token}")
+    
     success = send_invitation_email(invitation_data.email, invitation.token)
     
     if not success:
+        logger.error(f"❌ Failed to send invitation email to {invitation_data.email}")
+        logger.error(f"   Check SMTP configuration: SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, FRONTEND_URL")
         # Delete the invitation if email fails
         await db.invitations.delete_one({"id": invitation.id})
+        logger.error(f"   Deleted invitation {invitation.id} due to email failure")
         raise HTTPException(
             status_code=500, 
-            detail="Failed to send invitation email. Please check the email address or contact support@transip.nl if the issue persists."
+            detail="Failed to send invitation email. Please check SMTP configuration (SMTP_USERNAME, SMTP_PASSWORD, FRONTEND_URL) in environment variables."
         )
     
+    logger.info(f"✅ Invitation email sent successfully to {invitation_data.email}")
     return invitation
 
 @api_router.put("/invitations/{invitation_id}")

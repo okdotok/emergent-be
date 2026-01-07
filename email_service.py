@@ -19,9 +19,19 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: str
     """
     Send email via TransIP SMTP
     """
+    logger.info(f"📧 Preparing to send email to {to_email}")
+    logger.info(f"   SMTP_HOST: {SMTP_HOST}")
+    logger.info(f"   SMTP_PORT: {SMTP_PORT}")
+    logger.info(f"   SMTP_USERNAME: {'***' if SMTP_USERNAME else 'NOT SET'}")
+    logger.info(f"   SMTP_PASSWORD: {'***' if SMTP_PASSWORD else 'NOT SET'}")
+    logger.info(f"   SMTP_FROM: {SMTP_FROM}")
+    logger.info(f"   SMTP_SECURE: {SMTP_SECURE}")
+    
     if not SMTP_USERNAME or not SMTP_PASSWORD:
-        logger.warning(f"Email not sent - SMTP not configured. Would send to: {to_email}")
-        logger.info(f"Subject: {subject}")
+        logger.error(f"❌ Email not sent - SMTP credentials not configured!")
+        logger.error(f"   SMTP_USERNAME is {'set' if SMTP_USERNAME else 'NOT SET'}")
+        logger.error(f"   SMTP_PASSWORD is {'set' if SMTP_PASSWORD else 'NOT SET'}")
+        logger.error(f"   Would send to: {to_email}, Subject: {subject}")
         return False
     
     try:
@@ -39,6 +49,7 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: str
         part2 = MIMEText(html_content, 'html', 'utf-8')
         msg.attach(part2)
         
+        logger.info(f"📤 Connecting to SMTP server {SMTP_HOST}:{SMTP_PORT}...")
         # Send via SMTP
         if SMTP_SECURE == 'ssl':
             # SSL connection (port 465)
@@ -48,15 +59,20 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: str
             server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
             server.starttls()
         
+        logger.info(f"🔐 Logging in to SMTP server...")
         server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        logger.info(f"📨 Sending email message...")
         server.send_message(msg)
         server.quit()
         
-        logger.info(f"Email sent successfully to {to_email}")
+        logger.info(f"✅ Email sent successfully to {to_email}")
         return True
         
     except Exception as e:
-        logger.error(f"Error sending email: {str(e)}")
+        logger.error(f"❌ Error sending email to {to_email}: {str(e)}")
+        logger.error(f"   Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"   Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -64,7 +80,12 @@ def send_invitation_email(to_email: str, token: str):
     """
     Send invitation email to new employee
     """
+    logger.info(f"📧 Preparing invitation email for {to_email}")
+    logger.info(f"   FRONTEND_URL: {FRONTEND_URL}")
+    logger.info(f"   Token: {token}")
+    
     register_link = f"{FRONTEND_URL}/register/{token}"
+    logger.info(f"   Register link: {register_link}")
     
     html_content = f"""
     <!DOCTYPE html>
